@@ -1,0 +1,88 @@
+# Kafka de MesaTech Cloud: un broker con Zookeeper y Kafka UI (imagenes de la guia de clase)
+name: mesatech-kafka
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.9.0
+    container_name: mesatech-zookeeper
+    hostname: zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "cub zk-ready zookeeper:2181 30"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: mesatech-kafka
+    hostname: kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # INTERNAL para los contenedores de este compose, EXTERNAL para las aplicaciones
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://${KAFKA_EXTERNAL_HOST:-host.docker.internal}:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Los topicos se crean a mano (kafka-topicos), no solos
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_HEAP_OPTS: "-Xms512M -Xmx512M"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b localhost:29092 1 30"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Crea los topicos con 3 particiones y termina
+  kafka-topicos:
+    image: confluentinc/cp-kafka:7.9.0
+    container_name: mesatech-kafka-topicos
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      - ./scripts/crear-topicos.sh:/crear-topicos.sh:ro
+    command: ["bash", "/crear-topicos.sh"]
+
+  # Sin usuario ni clave: no dejar el 8085 abierto al mundo
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: mesatech-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: mesatech
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "false"
+
+volumes:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
