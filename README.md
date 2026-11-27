@@ -57,3 +57,19 @@ docker compose stop
 ```
 
 No usar `docker compose down -v`: borra el volumen con los mensajes y los offsets.
+
+## Eventos de prueba
+
+En `eventos/` hay un JSON valido y uno invalido por topico (misma key dentro de cada topico).
+Se publican con el script (el invalido primero, despues el valido):
+
+```
+./scripts/publicar-evento.sh solicitud-creada eventos/solicitud-creada.invalido.json
+./scripts/publicar-evento.sh solicitud-creada eventos/solicitud-creada.valido.json
+```
+
+| Topico | Campo que rompe el contrato en el invalido |
+|---|---|
+| solicitud-creada | prioridad vacia |
+| solicitud-estado | estadoNuevo con un valor que no existe (TERMINADA) |
+| prioridad-cambiada | nombreNuevo con solo espacios |
